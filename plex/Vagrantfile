@@ -1,0 +1,80 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Vagrantfile API/syntax version. Don't touch unless you know what you're doing!
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+# Get the image and name the box
+    #config.vm.box = "../packer-builds/build/Fedora-Docker.box"
+    config.vm.box = "../packer-builds/build/CentOS-7-Docker.box"
+
+# We only need the VM to talk to the host not the external network
+#    config.vm.network :"private_network", ip: "192.168.15.2"
+    #config.vm.network :"public_network" , :mac => "1234567890a5"
+
+# Forwards port 80 of vagrant to localhost:8080 on host
+#    config.vm.network "forwarded_port", guest: 80, host: 8080
+    config.vm.network "forwarded_port", guest: 32400, host: 32400, auto_correct: true
+    config.vm.network "forwarded_port", guest: 8112, host: 8112, auto_correct: true
+    config.vm.network "forwarded_port", guest: 8181, host: 8181, auto_correct: true
+
+# Use this section to change memory and cpus for virtualbox from defaults (512MB and 1 CPU)
+    config.vm.provider "virtualbox" do |vb|
+     # Don't boot with headless mode
+     # Use VBoxManage to customize the VM. For example to change memory:
+         vb.customize ["modifyvm", :id, "--memory", "2048"]
+         vb.customize ["modifyvm", :id, "--cpus", "2"]
+    end
+
+# Get the project information form git and print it out
+    repo = `git config --get remote.origin.url`.strip.gsub('.git','')
+
+    if (repo[/git@/])
+        projectImportPath = repo.gsub('git@','').gsub('ssh://','').split(/\:|\//).join('/')
+    elsif (repo[/https/])
+        projectImportPath = repo.gsub('https://','')
+    else
+        projectImportPath = Dir.pwd.split('/')[-1]
+    end
+
+    print "\n--Repo name: #{repo}\n"
+    print "--Project path: #{projectImportPath}\n"
+    print "--Shared folder: /src/#{projectImportPath}\n\n"
+
+    config.vm.synced_folder "./", "/src/#{projectImportPath}"
+
+# Everything below here is only run on provision or up
+    if (ARGV[0] == 'up' || ARGV[0] == 'provision')
+
+        require 'fileutils'
+        require 'pp'
+        host_home="#{ENV["HOME"]}"
+        host_files_to_copy=[".gitconfig", ".gitignore_global", ".ssh"]
+        print "--Host Files from '#{host_home}' to copy into the VM: \n"
+        PP.pp(host_files_to_copy)
+        vagrant_home=File.expand_path("./.vagrant/.home")
+        print "--Vagrant Home: #{vagrant_home}\n"
+
+        host_files_to_copy.each do |x|
+            temp="#{ENV["HOME"]}/#{x}"
+            File.directory?(temp)?element=temp+"/*":element=temp
+            Dir.glob(element).each do |src|
+                next if !File.file?(src)
+                # We don't want to copy the authorized keys or any agent files"
+                next if src.include? "authorized_keys"
+                next if src.include? "agent"
+                target = File.join(vagrant_home,src.gsub(host_home,''))
+                FileUtils.mkdir_p(File.dirname(target))
+                # Print what file is getting copied and where.
+                #print "--src File: #{src}\n--target: #{target}\n"
+                FileUtils.cp(src,target)
+            end
+        end
+
+# Simple bash provisioner file, runs while box is spinning up, every step is run as root
+        config.vm.provision :shell, :path => "bootstrap.sh"
+    end # End of if up or provision
+
+end

@@ -1,0 +1,54 @@
+{
+    "variables": {
+        "ssh_name": "vagrant",
+        "ssh_pass": "vagrant"
+    },
+    "builders": [{
+        "type": "virtualbox-iso",
+        "virtualbox_version_file": ".vbox_version",
+        "headless": true,
+
+        "guest_os_type": "RedHat_64",
+        "disk_size": 30720,
+        "hard_drive_interface": "sata",
+
+        "iso_url": "http://mirrors.xmission.com/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1611.iso",
+        "iso_checksum": "27bd866242ee058b7a5754e83d8ee8403e216b93d130d800852a96f41c34d86a",
+        "iso_checksum_type": "sha256",
+
+        "boot_command": [
+            "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/centos7/anaconda-ks.cfg<enter><wait>"
+        ],
+        "boot_wait": "12s",
+
+        "http_directory": "http",
+        "guest_additions_path": "VBoxGuestAdditions_{{.Version}}.iso",
+
+        "ssh_username": "{{user `ssh_name`}}",
+        "ssh_password": "{{user `ssh_pass`}}",
+        "ssh_port": 22,
+        "ssh_wait_timeout": "10000s",
+
+        "vboxmanage": [
+            ["modifyvm", "{{.Name}}", "--memory", "2048"],
+            ["modifyvm", "{{.Name}}", "--cpus", "2"]
+        ],
+
+        "shutdown_command": "echo '{{user `ssh_name`}}'|sudo -S /sbin/halt -h -p"
+    }],
+    "post-processors": [{
+        "output": "build/CentOS-7-Docker.box",
+        "type": "vagrant"
+    }],
+    "provisioners": [{
+        "type": "shell",
+        "execute_command": "echo 'vagrant' | {{.Vars}} sudo -S -E bash '{{.Path}}'",
+        "scripts": [
+            "scripts/centos7/vagrant.sh",
+            "scripts/centos7/update.sh",
+            "scripts/centos7/docker.sh",
+            "scripts/centos7/vboxguest.sh",
+            "scripts/centos7/compact.sh"
+        ]
+    }]
+}
